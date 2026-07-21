@@ -178,28 +178,30 @@ function renderResults(bands) {
 async function openBand(id) {
   if (!id || id === "null") return;
   el("detail").classList.remove("hidden");
+  el("detail").scrollTo(0, 0);
   el("detailInner").innerHTML = `<div class="p-16 flex justify-center"><div class="spinner"></div></div>`;
 
   try {
-    const [pageHtml, discoHtml, membersHtml, recoHtml] = await Promise.all([
+    // Nur die zwei nötigen Anfragen blockieren; Empfehlungen laden danach nach.
+    const [pageHtml, discoHtml] = await Promise.all([
       maFetch(`${MA}/bands/_/${id}`),
       maFetch(`${MA}/band/discography/id/${id}/tab/all`),
-      maFetch(`${MA}/band/view/members/all/id/${id}`).catch(() => ""),
-      maFetch(`${MA}/band/ajax-recommendations/id/${id}`).catch(() => ""),
     ]);
-    el("detailInner").innerHTML = bandHtml(parseBand(id, pageHtml, discoHtml, membersHtml, recoHtml));
+    const b = parseCore(id, pageHtml, discoHtml);
+    el("detailInner").innerHTML = bandHtml(b);
     bindDetail();
+    loadSimilar(id); // nicht blockierend
   } catch (err) {
     el("detailInner").innerHTML = `
       <div class="p-8">
-        <p class="mb-4" style="color: var(--accent-soft);">⚠ ${esc(err.message)}</p>
-        <button id="closeDetail" class="panel-2 px-4 py-2 rounded text-sm">Schließen</button>
+        <p class="mb-4" style="color: var(--accent-soft);">\u26a0 ${esc(err.message)}</p>
+        <button id="closeDetail" class="panel-2 px-4 py-2 rounded text-sm">Schlie\u00dfen</button>
       </div>`;
     bindDetail();
   }
 }
 
-function parseBand(id, pageHtml, discoHtml, membersHtml, recoHtml) {
+function parseCore(id, pageHtml, discoHtml) {
   const doc = html(pageHtml);
   const fields = {};
   doc.querySelectorAll("#band_stats dt, .band_stats dt").forEach((dt) => {
@@ -234,24 +236,42 @@ function parseBand(id, pageHtml, discoHtml, membersHtml, recoHtml) {
     });
   });
 
-  // Lineup (gruppiert)
-  const lineup = [];
-  if (membersHtml) {
-    let group = "Lineup";
-    html(membersHtml).querySelectorAll("tr").forEach((tr) => {
-      if (tr.classList.contains("lineupHeaders")) group = clean(tr.textContent) || group;
-      else if (tr.classList.contains("lineupRow")) {
-        const tds = tr.querySelectorAll("td");
-        const a = tds[0]?.querySelector("a");
-        const nm = clean(a?.textContent || tds[0]?.textContent);
-        if (nm) lineup.push({ group, name: nm, role: clean(tds[1]?.textContent) });
-      }
-    });
-  }
+  // Lineup direkt aus der Bandseite (spart eine Anfrage)
+  let lineup = parseLineup(doc, "#band_members tr");
+  if (!lineup.length) lineup = parseLineup(doc, ".lineupRow, .lineupHeaders");
 
-  // Ähnliche Bands
-  const similar = [];
-  if (recoHtml) {
+  return {
+    id, name, logo, photo,
+    country: fields["country of origin"] || "", location: fields["location"] || "",
+    status: fields["status"] || "", formed: fields["formed in"] || "",
+    yearsActive: fields["years active"] || "", genre: fields["genre"] || "",
+    themes: fields["lyrical themes"] || fields["themes"] || "",
+    label: fields["current label"] || fields["last label"] || "",
+    url: `${MA}/bands/_/${id}`, albums, lineup,
+  };
+}
+
+function parseLineup(doc, selector) {
+  const out = [];
+  let group = "Besetzung";
+  doc.querySelectorAll(selector).forEach((tr) => {
+    if (tr.classList.contains("lineupHeaders")) group = clean(tr.textContent) || group;
+    else if (tr.classList.contains("lineupRow")) {
+      const tds = tr.querySelectorAll("td");
+      const a = tds[0]?.querySelector("a");
+      const nm = clean(a?.textContent || tds[0]?.textContent);
+      if (nm) out.push({ group, name: nm, role: clean(tds[1]?.textContent) });
+    }
+  });
+  return out;
+}
+
+async function loadSimilar(id) {
+  const box = el("similarBox");
+  if (!box) return;
+  try {
+    const recoHtml = await maFetch(`${MA}/band/ajax-recommendations/id/${id}`);
+    const similar = [];
     html(recoHtml).querySelectorAll("tbody tr, tr").forEach((tr) => {
       const a = tr.querySelector("a[href*='/bands/']");
       if (!a) return;
@@ -262,17 +282,21 @@ function parseBand(id, pageHtml, discoHtml, membersHtml, recoHtml) {
         genre: tds.length > 2 ? clean(tds[2].textContent) : "",
       });
     });
+    box.innerHTML = similar.length ? renderSimilar(similar)
+      : `<p class="text-sm" style="color: var(--muted);">Keine Empfehlungen.</p>`;
+    box.querySelectorAll("button[data-simid]").forEach((btn) =>
+      btn.addEventListener("click", () => { el("detail").scrollTo(0, 0); openBand(btn.dataset.simid); }));
+  } catch {
+    box.innerHTML = `<p class="text-sm" style="color: var(--muted);">Empfehlungen konnten nicht geladen werden.</p>`;
   }
+}
 
-  return {
-    id, name, logo, photo,
-    country: fields["country of origin"] || "", location: fields["location"] || "",
-    status: fields["status"] || "", formed: fields["formed in"] || "",
-    yearsActive: fields["years active"] || "", genre: fields["genre"] || "",
-    themes: fields["lyrical themes"] || fields["themes"] || "",
-    label: fields["current label"] || fields["last label"] || "",
-    url: `${MA}/bands/_/${id}`, albums, lineup, similar,
-  };
+function renderSimilar(similar) {
+  return `<div class="grid grid-cols-1 sm:grid-cols-2 gap-2">${similar.slice(0, 12).map((s) => `
+    <button data-simid="${s.id}" class="link-card panel-2 text-left px-3 py-2 rounded transition">
+      <div class="font-500 text-sm">${esc(s.name)}</div>
+      <div class="text-xs" style="color: var(--muted);">${esc(s.genre)}${s.country ? " \u00b7 " + esc(s.country) : ""}</div>
+    </button>`).join("")}</div>`;
 }
 
 function bandHtml(b) {
@@ -284,7 +308,7 @@ function bandHtml(b) {
   ];
   const infoRows = [
     ["Land", b.country], ["Ort", b.location], ["Status", b.status],
-    ["Gegründet", b.formed], ["Aktiv", b.yearsActive], ["Genre", b.genre],
+    ["Gegr\u00fcndet", b.formed], ["Aktiv", b.yearsActive], ["Genre", b.genre],
     ["Themen", b.themes], ["Label", b.label],
   ].filter(([, v]) => v);
 
@@ -292,14 +316,22 @@ function bandHtml(b) {
     ? `<table class="w-full text-sm">
          <thead><tr style="color: var(--muted);" class="text-left border-b">
            <th class="py-2 pr-3 font-500">Release</th><th class="py-2 pr-3 font-500">Typ</th>
-           <th class="py-2 pr-3 font-500">Jahr</th><th class="py-2 font-500">Reviews</th>
-         </tr></thead><tbody>${b.albums.map((a) => `
+           <th class="py-2 pr-3 font-500">Jahr</th><th class="py-2 pr-3 font-500">Reviews</th>
+           <th class="py-2 font-500"></th>
+         </tr></thead><tbody>${b.albums.map((a) => {
+           const rq = encodeURIComponent(b.name + " " + a.name);
+           return `
            <tr class="border-b" style="border-color: var(--border);">
              <td class="py-2 pr-3">${esc(a.name)}</td>
              <td class="py-2 pr-3" style="color: var(--bone);">${esc(a.type)}</td>
              <td class="py-2 pr-3" style="color: var(--muted);">${esc(a.year)}</td>
-             <td class="py-2">${reviewBadge(a)}</td>
-           </tr>`).join("")}</tbody></table>`
+             <td class="py-2 pr-3">${reviewBadge(a)}</td>
+             <td class="py-2"><a href="https://music.youtube.com/search?q=${rq}" target="_blank" rel="noopener"
+                  title="Dieses Release bei YouTube Music suchen"
+                  class="inline-flex items-center whitespace-nowrap px-2 py-1 rounded text-xs font-600 hover:brightness-110"
+                  style="background:#ff0000;color:#fff;">\u25b6 YTM</a></td>
+           </tr>`;
+         }).join("")}</tbody></table>`
     : `<p class="text-sm" style="color: var(--muted);">Keine Releases gefunden.</p>`;
 
   const groups = {};
@@ -316,49 +348,50 @@ function bandHtml(b) {
         </div>`).join("")
     : `<p class="text-sm" style="color: var(--muted);">Keine Lineup-Daten.</p>`;
 
-  const similar = (b.similar || []).length
-    ? `<div class="grid grid-cols-1 sm:grid-cols-2 gap-2">${b.similar.slice(0, 12).map((s) => `
-         <button data-simid="${s.id}" class="link-card panel-2 text-left px-3 py-2 rounded transition">
-           <div class="font-500 text-sm">${esc(s.name)}</div>
-           <div class="text-xs" style="color: var(--muted);">${esc(s.genre)}${s.country ? " · " + esc(s.country) : ""}</div>
-         </button>`).join("")}</div>`
-    : `<p class="text-sm" style="color: var(--muted);">Keine Empfehlungen.</p>`;
-
   return `
     <div class="relative">
-      <button id="closeDetail" class="sticky top-0 float-right m-3 z-10 w-9 h-9 rounded-full panel-2 flex items-center justify-center hover:brightness-125">✕</button>
-      ${b.photo ? `<div class="w-full h-48 sm:h-56 bg-black overflow-hidden">
-        <img src="${b.photo}" alt="" class="w-full h-full object-cover opacity-90" referrerpolicy="no-referrer" onerror="this.parentElement.style.display='none'"/></div>` : ""}
+      <button id="closeDetail" class="sticky top-0 float-right m-3 z-10 w-9 h-9 rounded-full panel-2 flex items-center justify-center hover:brightness-125">\u2715</button>
       <div class="p-5 sm:p-6">
+        <!-- Logo oben -->
         ${b.logo
-          ? `<img src="${b.logo}" alt="${esc(b.name)}" class="max-h-16 sm:max-h-20 mb-4" referrerpolicy="no-referrer" onerror="this.style.display='none';document.getElementById('nameFb').style.display='block'"/>
-             <h2 id="nameFb" class="display text-2xl sm:text-3xl font-700 mb-4" style="display:none;">${esc(b.name)}</h2>`
-          : `<h2 class="display text-2xl sm:text-3xl font-700 mb-4">${esc(b.name)}</h2>`}
+          ? `<img src="${b.logo}" alt="${esc(b.name)}" class="max-h-20 sm:max-h-24 mb-3" referrerpolicy="no-referrer" onerror="this.style.display='none';document.getElementById('nameFb').style.display='block'"/>
+             <h2 id="nameFb" class="display text-2xl sm:text-3xl font-700 mb-3" style="display:none;">${esc(b.name)}</h2>`
+          : `<h2 class="display text-2xl sm:text-3xl font-700 mb-3">${esc(b.name)}</h2>`}
+        <!-- Bandfoto darunter -->
+        ${b.photo ? `<img src="${b.photo}" alt="" class="w-full max-w-md rounded mb-5 object-cover" referrerpolicy="no-referrer" onerror="this.style.display='none'"/>` : ""}
+
         <div class="flex flex-wrap gap-2 sm:gap-3 mb-6">
           ${links.map(([label, url, color]) => `
             <a href="${url}" target="_blank" rel="noopener"
                class="px-4 py-2 rounded text-sm font-600 hover:brightness-110"
-               style="background:${color}; color:#fff;">${label} ↗</a>`).join("")}
+               style="background:${color}; color:#fff;">${label} \u2197</a>`).join("")}
         </div>
+
         <div class="panel-2 rounded p-4 mb-6 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
           ${infoRows.map(([k, v]) => `
             <div class="flex gap-2"><span class="w-24 shrink-0" style="color: var(--muted);">${k}</span><span>${esc(v)}</span></div>`).join("")}
         </div>
-        <h3 class="display text-lg font-600 mb-2">Lineup</h3>
-        <div class="panel-2 rounded p-4 mb-6">${lineup}</div>
+
+        <!-- Erst Releases -->
         <h3 class="display text-lg font-600 mb-2">Diskografie</h3>
         <div class="overflow-x-auto mb-6">${albums}</div>
-        <h3 class="display text-lg font-600 mb-2">Ähnliche Bands</h3>
-        <div class="mb-2">${similar}</div>
+
+        <!-- Dann Members -->
+        <h3 class="display text-lg font-600 mb-2">Lineup</h3>
+        <div class="panel-2 rounded p-4 mb-6">${lineup}</div>
+
+        <h3 class="display text-lg font-600 mb-2">\u00c4hnliche Bands</h3>
+        <div id="similarBox" class="mb-2"><div class="flex items-center gap-2 text-sm" style="color: var(--muted);"><span class="spinner" style="width:18px;height:18px;border-width:2px;"></span>l\u00e4dt \u2026</div></div>
+
         <div class="mt-6 pt-4" style="border-top: 1px solid var(--border);">
-          <a href="${b.url}" target="_blank" rel="noopener" class="text-sm" style="color: var(--muted);">Auf Metal Archives ansehen ↗</a>
+          <a href="${b.url}" target="_blank" rel="noopener" class="text-sm" style="color: var(--muted);">Auf Metal Archives ansehen \u2197</a>
         </div>
       </div>
     </div>`;
 }
 
 function reviewBadge(a) {
-  if (a.reviewScore == null && !a.reviewCount) return `<span style="color: var(--muted);">—</span>`;
+  if (a.reviewScore == null && !a.reviewCount) return `<span style="color: var(--muted);">\u2014</span>`;
   const color = a.reviewScore == null ? "var(--muted)"
     : a.reviewScore >= 75 ? "#3fb950" : a.reviewScore >= 50 ? "#d8d4c8" : "var(--accent-soft)";
   const label = (a.reviewScore != null ? a.reviewScore + "% " : "") + "(" + a.reviewCount + ")";
@@ -370,9 +403,8 @@ function bindDetail() {
   const close = () => el("detail").classList.add("hidden");
   el("closeDetail")?.addEventListener("click", close);
   el("detail").addEventListener("click", (e) => { if (e.target === el("detail")) close(); });
-  el("detailInner").querySelectorAll("button[data-simid]").forEach((b) =>
-    b.addEventListener("click", () => { el("detail").scrollTo(0, 0); openBand(b.dataset.simid); }));
 }
+
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") el("detail").classList.add("hidden"); });
 
 // ---- Helfer ----
