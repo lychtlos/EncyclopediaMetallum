@@ -279,8 +279,7 @@ function renderAlbums(albums, bandName) {
   return `<table class="w-full text-sm">
      <thead><tr style="color: var(--muted);" class="text-left border-b">
        <th class="py-2 pr-3 font-500">Release</th><th class="py-2 pr-3 font-500">Typ</th>
-       <th class="py-2 pr-3 font-500">Jahr</th><th class="py-2 pr-3 font-500">Reviews</th>
-       <th class="py-2 font-500"></th>
+       <th class="py-2 pr-3 font-500">Jahr</th><th class="py-2 font-500"></th>
      </tr></thead><tbody>${albums.map((a) => {
        const rq = encodeURIComponent(bandName + " " + a.name);
        return `
@@ -288,8 +287,7 @@ function renderAlbums(albums, bandName) {
          <td class="py-2 pr-3">${esc(a.name)}</td>
          <td class="py-2 pr-3" style="color: var(--bone);">${esc(a.type)}</td>
          <td class="py-2 pr-3" style="color: var(--muted);">${esc(a.year)}</td>
-         <td class="py-2 pr-3">${reviewBadge(a)}</td>
-         <td class="py-2"><a href="https://music.youtube.com/search?q=${rq}" target="_blank" rel="noopener"
+         <td class="py-2 text-right"><a href="https://music.youtube.com/search?q=${rq}" target="_blank" rel="noopener"
               title="Dieses Release bei YouTube Music suchen"
               class="inline-flex items-center whitespace-nowrap px-2 py-1 rounded text-xs font-600 hover:brightness-110"
               style="background:#ff0000;color:#fff;">\u25b6 YTM</a></td>
@@ -362,10 +360,12 @@ function bandHtml(b) {
       <button id="closeDetail" class="sticky top-0 float-right m-3 z-10 w-9 h-9 rounded-full panel-2 flex items-center justify-center hover:brightness-125">\u2715</button>
       <div class="p-5 sm:p-6">
         ${b.logo
-          ? `<img src="${b.logo}" alt="${esc(b.name)}" class="max-h-20 sm:max-h-24 mb-3" referrerpolicy="no-referrer" onerror="this.style.display='none';document.getElementById('nameFb').style.display='block'"/>
-             <h2 id="nameFb" class="display text-2xl sm:text-3xl font-700 mb-3" style="display:none;">${esc(b.name)}</h2>`
-          : `<h2 class="display text-2xl sm:text-3xl font-700 mb-3">${esc(b.name)}</h2>`}
-        ${b.photo ? `<img src="${b.photo}" alt="" class="w-full max-w-md rounded mb-5 object-cover" referrerpolicy="no-referrer" onerror="this.style.display='none'"/>` : ""}
+          ? `<a href="${b.logo}" target="_blank" rel="noopener" title="Logo in voller Gr\u00f6\u00dfe">
+               <img src="${b.logo}" alt="${esc(b.name)}" class="max-h-32 sm:max-h-44 mb-4 cursor-zoom-in" referrerpolicy="no-referrer" onerror="this.parentElement.style.display='none';document.getElementById('nameFb').style.display='block'"/></a>
+             <h2 id="nameFb" class="display text-2xl sm:text-3xl font-700 mb-4" style="display:none;">${esc(b.name)}</h2>`
+          : `<h2 class="display text-2xl sm:text-3xl font-700 mb-4">${esc(b.name)}</h2>`}
+        ${b.photo ? `<a href="${b.photo}" target="_blank" rel="noopener" title="Foto in voller Gr\u00f6\u00dfe">
+             <img src="${b.photo}" alt="" class="h-24 sm:h-28 w-auto rounded mb-5 object-cover cursor-zoom-in" referrerpolicy="no-referrer" onerror="this.parentElement.style.display='none'"/></a>` : ""}
 
         <div class="flex flex-wrap gap-2 sm:gap-3 mb-6">
           ${links.map(([label, url, color]) => `
