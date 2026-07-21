@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Metal Explorer</title>
+  <meta name="theme-color" content="#0b0b0d" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <link rel="icon" href="icon-192.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Metal" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg:#0b0b0d; --panel:#141418; --panel-2:#1b1b21; --border:#2a2a31;
+      --text:#e7e7ea; --muted:#9a9aa4; --accent:#c8102e; --accent-soft:#e0455e; --bone:#d8d4c8;
+    }
+    html,body{background:var(--bg);color:var(--text);}
+    body{font-family:"Inter",system-ui,sans-serif;-webkit-text-size-adjust:100%;}
+    .display{font-family:"Oswald","Inter",sans-serif;letter-spacing:.02em;}
+    .panel{background:var(--panel);border:1px solid var(--border);}
+    .panel-2{background:var(--panel-2);border:1px solid var(--border);}
+    input,select{background:var(--panel-2);border:1px solid var(--border);color:var(--text);}
+    input:focus,select:focus{outline:none;border-color:var(--accent-soft);}
+    .btn-accent{background:var(--accent);} .btn-accent:hover{background:var(--accent-soft);}
+    .link-card:active,.link-card:hover{border-color:var(--accent-soft);background:var(--panel-2);}
+    .spinner{border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;width:28px;height:28px;animation:spin .8s linear infinite;}
+    @keyframes spin{to{transform:rotate(360deg);}}
+    .fade{animation:fade .25s ease;}
+    @keyframes fade{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:none;}}
+  </style>
+</head>
+<body class="min-h-screen">
+  <header class="border-b sticky top-0 z-30" style="border-color:var(--border);background:var(--bg);">
+    <div class="max-w-6xl mx-auto px-4 py-4 flex items-center gap-3">
+      <div class="w-8 h-8 flex items-center justify-center" style="background:var(--accent);">
+        <span class="display font-bold text-lg leading-none">M</span>
+      </div>
+      <div class="flex-1">
+        <h1 class="display text-xl sm:text-2xl font-700 tracking-wide">METAL EXPLORER</h1>
+        <p class="text-xs hidden sm:block" style="color:var(--muted);">Encyclopaedia Metallum · Suche &amp; Streaming-Links</p>
+      </div>
+      <button id="settingsBtn" title="Proxy-Einstellungen" class="w-9 h-9 rounded panel-2 flex items-center justify-center hover:brightness-125">⚙</button>
+    </div>
+
+    <!-- Proxy-Einstellungen -->
+    <div id="settings" class="hidden border-t" style="border-color:var(--border);background:var(--panel);">
+      <div class="max-w-6xl mx-auto px-4 py-4 text-sm">
+        <label class="block mb-1" style="color:var(--muted);">Eigener Proxy / Cloudflare-Worker (optional, für Zuverlässigkeit)</label>
+        <div class="flex flex-col sm:flex-row gap-2">
+          <input id="proxyInput" type="text" placeholder="https://dein-worker.workers.dev" class="flex-1 px-3 py-2 rounded" />
+          <button id="proxySave" class="btn-accent px-4 py-2 rounded font-600">Speichern</button>
+        </div>
+        <p class="mt-2 text-xs" style="color:var(--muted);">
+          Leer lassen = öffentliche Proxys mit Fallback. Bei häufigem „kein Proxy erreichbar" einen eigenen Worker eintragen (Anleitung in der README).
+        </p>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-4 py-5">
+    <section class="panel p-4">
+      <div class="flex flex-col sm:flex-row gap-3">
+        <input id="q" type="text" inputmode="search" placeholder="Band suchen … (z. B. Emperor)" class="flex-1 px-4 py-3 text-base rounded" autocomplete="off" />
+        <div class="flex gap-3">
+          <button id="filterToggle" class="panel-2 px-4 py-3 rounded text-sm hover:brightness-125 whitespace-nowrap flex-1 sm:flex-none">Filter <span id="filterCount" class="ml-1" style="color:var(--accent-soft);"></span></button>
+          <button id="searchBtn" class="btn-accent px-6 py-3 rounded font-600 text-sm whitespace-nowrap flex-1 sm:flex-none">Suchen</button>
+        </div>
+      </div>
+      <div id="filters" class="hidden mt-4 pt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3" style="border-top:1px solid var(--border);">
+        <label class="text-sm"><span class="block mb-1" style="color:var(--muted);">Genre</span>
+          <input id="genre" type="text" placeholder="z. B. Black Metal" class="w-full px-3 py-2 rounded" /></label>
+        <label class="text-sm"><span class="block mb-1" style="color:var(--muted);">Land</span>
+          <select id="country" class="w-full px-3 py-2 rounded"></select></label>
+        <label class="text-sm"><span class="block mb-1" style="color:var(--muted);">Gegründet ab</span>
+          <input id="yearFrom" type="number" min="1960" max="2030" placeholder="1990" class="w-full px-3 py-2 rounded" /></label>
+        <label class="text-sm"><span class="block mb-1" style="color:var(--muted);">Gegründet bis</span>
+          <input id="yearTo" type="number" min="1960" max="2030" placeholder="2010" class="w-full px-3 py-2 rounded" /></label>
+      </div>
+    </section>
+
+    <div id="status" class="mt-5 text-center text-sm" style="color:var(--muted);">Gib einen Bandnamen ein oder nutze die Filter.</div>
+
+    <section id="results" class="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></section>
+    <div id="pager" class="mt-6 hidden justify-center gap-3">
+      <button id="prevBtn" class="panel-2 px-4 py-2 rounded text-sm disabled:opacity-40">Zurück</button>
+      <span id="pageInfo" class="px-2 py-2 text-sm" style="color:var(--muted);"></span>
+      <button id="nextBtn" class="panel-2 px-4 py-2 rounded text-sm disabled:opacity-40">Weiter</button>
+    </div>
+  </main>
+
+  <div id="detail" class="hidden fixed inset-0 z-50 overflow-y-auto" style="background:rgba(0,0,0,.8);">
+    <div class="min-h-screen px-0 sm:px-4 py-0 sm:py-8 flex items-start justify-center">
+      <div id="detailInner" class="panel w-full max-w-3xl sm:rounded-lg overflow-hidden fade min-h-screen sm:min-h-0"></div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
