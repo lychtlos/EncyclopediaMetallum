@@ -31,14 +31,16 @@ function buildAttempts(maUrl) {
   return list;
 }
 
+const memCache = new Map(); // Session-Cache: identische Anfragen nicht doppelt holen
 async function maFetch(maUrl) {
+  if (memCache.has(maUrl)) return memCache.get(maUrl);
   let lastErr;
   for (const reqUrl of buildAttempts(maUrl)) {
     try {
       const res = await fetch(reqUrl, { headers: { Accept: "application/json, text/html, */*" } });
       if (!res.ok) { lastErr = new Error("HTTP " + res.status); continue; }
       const text = await res.text();
-      if (text && text.length > 0) return text;
+      if (text && text.length > 0) { memCache.set(maUrl, text); return text; }
       lastErr = new Error("Leere Antwort");
     } catch (e) {
       lastErr = e;
@@ -182,15 +184,13 @@ async function openBand(id) {
   el("detailInner").innerHTML = `<div class="p-16 flex justify-center"><div class="spinner"></div></div>`;
 
   try {
-    // Nur die zwei nötigen Anfragen blockieren; Empfehlungen laden danach nach.
-    const [pageHtml, discoHtml] = await Promise.all([
-      maFetch(`${MA}/bands/_/${id}`),
-      maFetch(`${MA}/band/discography/id/${id}/tab/all`),
-    ]);
-    const b = parseCore(id, pageHtml, discoHtml);
+    // Nur die Bandseite blockiert das Öffnen; Releases + Empfehlungen laden nach.
+    const pageHtml = await maFetch(`${MA}/bands/_/${id}`);
+    const b = parseCore(id, pageHtml);
     el("detailInner").innerHTML = bandHtml(b);
     bindDetail();
-    loadSimilar(id); // nicht blockierend
+    loadDisco(id, b.name);   // nicht blockierend
+    loadSimilar(id);         // nicht blockierend
   } catch (err) {
     el("detailInner").innerHTML = `
       <div class="p-8">
@@ -201,7 +201,7 @@ async function openBand(id) {
   }
 }
 
-function parseCore(id, pageHtml, discoHtml) {
+function parseCore(id, pageHtml) {
   const doc = html(pageHtml);
   const fields = {};
   doc.querySelectorAll("#band_stats dt, .band_stats dt").forEach((dt) => {
@@ -220,23 +220,6 @@ function parseCore(id, pageHtml, discoHtml) {
   const photo = doc.querySelector("#photo")?.getAttribute("href") ||
     doc.querySelector("#photo img")?.getAttribute("src") || null;
 
-  // Diskografie + Reviews
-  const albums = [];
-  html(discoHtml).querySelectorAll("table.discog tbody tr, table.display tbody tr").forEach((tr) => {
-    const tds = tr.querySelectorAll("td");
-    if (tds.length < 3) return;
-    const nm = clean(tds[0].textContent);
-    if (!nm || /no discography/i.test(nm)) return;
-    const rv = tds.length > 3 ? clean(tds[3].textContent) : "";
-    albums.push({
-      name: nm, type: clean(tds[1].textContent), year: clean(tds[2].textContent),
-      reviewCount: rv.match(/(\d+)/) ? Number(rv.match(/(\d+)/)[1]) : 0,
-      reviewScore: rv.match(/(\d{1,3})\s*%/) ? Number(rv.match(/(\d{1,3})\s*%/)[1]) : null,
-      reviewUrl: tds.length > 3 ? tds[3].querySelector("a")?.getAttribute("href") || null : null,
-    });
-  });
-
-  // Lineup direkt aus der Bandseite (spart eine Anfrage)
   let lineup = parseLineup(doc, "#band_members tr");
   if (!lineup.length) lineup = parseLineup(doc, ".lineupRow, .lineupHeaders");
 
@@ -247,7 +230,7 @@ function parseCore(id, pageHtml, discoHtml) {
     yearsActive: fields["years active"] || "", genre: fields["genre"] || "",
     themes: fields["lyrical themes"] || fields["themes"] || "",
     label: fields["current label"] || fields["last label"] || "",
-    url: `${MA}/bands/_/${id}`, albums, lineup,
+    url: `${MA}/bands/_/${id}`, lineup,
   };
 }
 
@@ -264,6 +247,54 @@ function parseLineup(doc, selector) {
     }
   });
   return out;
+}
+
+async function loadDisco(id, bandName) {
+  const box = el("discoBox");
+  if (!box) return;
+  try {
+    const discoHtml = await maFetch(`${MA}/band/discography/id/${id}/tab/all`);
+    const albums = [];
+    html(discoHtml).querySelectorAll("table.discog tbody tr, table.display tbody tr").forEach((tr) => {
+      const tds = tr.querySelectorAll("td");
+      if (tds.length < 3) return;
+      const nm = clean(tds[0].textContent);
+      if (!nm || /no discography/i.test(nm)) return;
+      const rv = tds.length > 3 ? clean(tds[3].textContent) : "";
+      albums.push({
+        name: nm, type: clean(tds[1].textContent), year: clean(tds[2].textContent),
+        reviewCount: rv.match(/(\d+)/) ? Number(rv.match(/(\d+)/)[1]) : 0,
+        reviewScore: rv.match(/(\d{1,3})\s*%/) ? Number(rv.match(/(\d{1,3})\s*%/)[1]) : null,
+        reviewUrl: tds.length > 3 ? tds[3].querySelector("a")?.getAttribute("href") || null : null,
+      });
+    });
+    box.innerHTML = renderAlbums(albums, bandName);
+  } catch {
+    box.innerHTML = `<p class="text-sm" style="color: var(--muted);">Diskografie konnte nicht geladen werden.</p>`;
+  }
+}
+
+function renderAlbums(albums, bandName) {
+  if (!albums.length) return `<p class="text-sm" style="color: var(--muted);">Keine Releases gefunden.</p>`;
+  return `<table class="w-full text-sm">
+     <thead><tr style="color: var(--muted);" class="text-left border-b">
+       <th class="py-2 pr-3 font-500">Release</th><th class="py-2 pr-3 font-500">Typ</th>
+       <th class="py-2 pr-3 font-500">Jahr</th><th class="py-2 pr-3 font-500">Reviews</th>
+       <th class="py-2 font-500"></th>
+     </tr></thead><tbody>${albums.map((a) => {
+       const rq = encodeURIComponent(bandName + " " + a.name);
+       return `
+       <tr class="border-b" style="border-color: var(--border);">
+         <td class="py-2 pr-3">${esc(a.name)}</td>
+         <td class="py-2 pr-3" style="color: var(--bone);">${esc(a.type)}</td>
+         <td class="py-2 pr-3" style="color: var(--muted);">${esc(a.year)}</td>
+         <td class="py-2 pr-3">${reviewBadge(a)}</td>
+         <td class="py-2"><a href="https://music.youtube.com/search?q=${rq}" target="_blank" rel="noopener"
+              title="Dieses Release bei YouTube Music suchen"
+              class="inline-flex items-center whitespace-nowrap px-2 py-1 rounded text-xs font-600 hover:brightness-110"
+              style="background:#ff0000;color:#fff;">\u25b6 YTM</a></td>
+       </tr>`;
+     }).join("")}</tbody></table>`;
 }
 
 async function loadSimilar(id) {
@@ -312,28 +343,6 @@ function bandHtml(b) {
     ["Themen", b.themes], ["Label", b.label],
   ].filter(([, v]) => v);
 
-  const albums = b.albums.length
-    ? `<table class="w-full text-sm">
-         <thead><tr style="color: var(--muted);" class="text-left border-b">
-           <th class="py-2 pr-3 font-500">Release</th><th class="py-2 pr-3 font-500">Typ</th>
-           <th class="py-2 pr-3 font-500">Jahr</th><th class="py-2 pr-3 font-500">Reviews</th>
-           <th class="py-2 font-500"></th>
-         </tr></thead><tbody>${b.albums.map((a) => {
-           const rq = encodeURIComponent(b.name + " " + a.name);
-           return `
-           <tr class="border-b" style="border-color: var(--border);">
-             <td class="py-2 pr-3">${esc(a.name)}</td>
-             <td class="py-2 pr-3" style="color: var(--bone);">${esc(a.type)}</td>
-             <td class="py-2 pr-3" style="color: var(--muted);">${esc(a.year)}</td>
-             <td class="py-2 pr-3">${reviewBadge(a)}</td>
-             <td class="py-2"><a href="https://music.youtube.com/search?q=${rq}" target="_blank" rel="noopener"
-                  title="Dieses Release bei YouTube Music suchen"
-                  class="inline-flex items-center whitespace-nowrap px-2 py-1 rounded text-xs font-600 hover:brightness-110"
-                  style="background:#ff0000;color:#fff;">\u25b6 YTM</a></td>
-           </tr>`;
-         }).join("")}</tbody></table>`
-    : `<p class="text-sm" style="color: var(--muted);">Keine Releases gefunden.</p>`;
-
   const groups = {};
   (b.lineup || []).forEach((m) => { (groups[m.group] ||= []).push(m); });
   const lineup = Object.keys(groups).length
@@ -352,12 +361,10 @@ function bandHtml(b) {
     <div class="relative">
       <button id="closeDetail" class="sticky top-0 float-right m-3 z-10 w-9 h-9 rounded-full panel-2 flex items-center justify-center hover:brightness-125">\u2715</button>
       <div class="p-5 sm:p-6">
-        <!-- Logo oben -->
         ${b.logo
           ? `<img src="${b.logo}" alt="${esc(b.name)}" class="max-h-20 sm:max-h-24 mb-3" referrerpolicy="no-referrer" onerror="this.style.display='none';document.getElementById('nameFb').style.display='block'"/>
              <h2 id="nameFb" class="display text-2xl sm:text-3xl font-700 mb-3" style="display:none;">${esc(b.name)}</h2>`
           : `<h2 class="display text-2xl sm:text-3xl font-700 mb-3">${esc(b.name)}</h2>`}
-        <!-- Bandfoto darunter -->
         ${b.photo ? `<img src="${b.photo}" alt="" class="w-full max-w-md rounded mb-5 object-cover" referrerpolicy="no-referrer" onerror="this.style.display='none'"/>` : ""}
 
         <div class="flex flex-wrap gap-2 sm:gap-3 mb-6">
@@ -372,11 +379,9 @@ function bandHtml(b) {
             <div class="flex gap-2"><span class="w-24 shrink-0" style="color: var(--muted);">${k}</span><span>${esc(v)}</span></div>`).join("")}
         </div>
 
-        <!-- Erst Releases -->
         <h3 class="display text-lg font-600 mb-2">Diskografie</h3>
-        <div class="overflow-x-auto mb-6">${albums}</div>
+        <div id="discoBox" class="overflow-x-auto mb-6"><div class="flex items-center gap-2 text-sm" style="color: var(--muted);"><span class="spinner" style="width:18px;height:18px;border-width:2px;"></span>l\u00e4dt \u2026</div></div>
 
-        <!-- Dann Members -->
         <h3 class="display text-lg font-600 mb-2">Lineup</h3>
         <div class="panel-2 rounded p-4 mb-6">${lineup}</div>
 
