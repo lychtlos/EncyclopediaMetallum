@@ -51,6 +51,14 @@ async function maFetch(maUrl) {
   );
 }
 
+// JSON auch dann lesen, wenn ein Proxy es in HTML einwickelt (z. B. ScraperAPI render)
+function extractJson(raw) {
+  try { return JSON.parse(raw); } catch {}
+  const doc = new DOMParser().parseFromString(raw, "text/html");
+  const text = (doc.querySelector("pre")?.textContent || doc.body?.textContent || "").trim();
+  return JSON.parse(text);
+}
+
 // ---- Parsing-Helfer (DOMParser statt cheerio) ----
 const parser = new DOMParser();
 const html = (s) => parser.parseFromString(s || "", "text/html");
@@ -123,7 +131,7 @@ async function runSearch(start) {
   try {
     const raw = await maFetch(searchUrl(state.start));
     let json;
-    try { json = JSON.parse(raw); }
+    try { json = extractJson(raw); }
     catch { throw new Error("Unerwartete Antwort (kein JSON) – Proxy liefert evtl. eine Fehlerseite."); }
 
     const bands = (json.aaData || []).map((row) => {
