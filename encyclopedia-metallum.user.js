@@ -34,7 +34,7 @@
 
   // Start ueber die Homescreen-Verknuepfung (#mx): MA-Seite gar nicht erst aufblitzen
   // lassen, sondern direkt in die Oberflaeche starten.
-  const BOOT = location.hash.toLowerCase() === "#mx";
+  const BOOT = /^#mx(=|$)/i.test(location.hash);
   if (BOOT) {
     document.documentElement.classList.add("mx-boot");
     const st = document.createElement("style");
@@ -252,17 +252,36 @@ function init() {
   const $ = (id) => document.getElementById(id);
   $("mx-country").innerHTML = COUNTRIES.map(([v, l]) => `<option value="${v}">${l}</option>`).join("");
 
-  function openOverlay() {
+  function openOverlay(focus) {
     overlay.classList.add("mx-open");
-    setTimeout(() => $("mx-q").focus(), 60);
+    if (focus !== false) setTimeout(() => $("mx-q").focus(), 60);
   }
-  launch.addEventListener("click", openOverlay);
+  launch.addEventListener("click", () => openOverlay(true));
+
+  // Suchbegriff aus der Adresse lesen: #mx=emperor
+  // Damit laesst sich die Suche direkt von aussen anstossen (Firefox-Suchwidget,
+  // eigene Suchmaschine, Verknuepfung).
+  function hashQuery() {
+    const m = (location.hash || "").match(/^#mx=(.*)$/i);
+    if (!m || !m[1]) return null;
+    try { return decodeURIComponent(m[1].replace(/\+/g, " ")); }
+    catch (e) { return m[1]; }
+  }
+  function openFromHash() {
+    if (!/^#mx(=|$)/i.test(location.hash)) return;
+    const q = hashQuery();
+    if (q) {
+      openOverlay(false);
+      $("mx-q").value = q;
+      runSearch(0);
+    } else {
+      openOverlay(true);
+    }
+  }
   // Unabhängig vom Button: URL mit #mx öffnet die Oberfläche sofort.
   // Praktisch als Homescreen-Verknüpfung: https://www.metal-archives.com/#mx
-  if (location.hash.toLowerCase() === "#mx") openOverlay();
-  window.addEventListener("hashchange", () => {
-    if (location.hash.toLowerCase() === "#mx") openOverlay();
-  });
+  openFromHash();
+  window.addEventListener("hashchange", openFromHash);
   $("mx-close").addEventListener("click", () => {
     overlay.classList.remove("mx-open");
     document.documentElement.classList.remove("mx-boot");

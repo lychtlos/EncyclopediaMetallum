@@ -48,6 +48,35 @@ solange beide Dateien im selben Ordner liegen.
 Die Verknüpfung muss aus Firefox heraus angelegt werden. Sie öffnet dann
 immer Firefox – der Standardbrowser bleibt davon unberührt.
 
+## Suche vom Homescreen (Widget-Ersatz)
+Ein echtes Android-Widget kann nur eine installierte App liefern. Firefox
+bringt aber ein eigenes Suchwidget mit – zusammen mit einer eigenen
+Suchmaschine ergibt das ein Suchfeld auf dem Homescreen, das direkt in der
+Oberfläche landet.
+
+Das Skript nimmt dafür einen Suchbegriff aus der Adresse entgegen:
+
+    https://www.metal-archives.com/#mx=emperor
+
+### Eigene Suchmaschine in Firefox anlegen
+1. Firefox → Menü ⋮ → **Einstellungen** → **Suche** → **Suchmaschine hinzufügen**
+2. Name: `Metal Archives`
+3. Adresse: `https://www.metal-archives.com/#mx=%s`
+4. Kürzel (falls abgefragt): `ma`
+
+Danach in der Adressleiste `ma emperor` eingeben – die Suche läuft sofort in
+der Oberfläche. Die normale Standardsuche bleibt unverändert.
+
+### Suchfeld auf den Homescreen
+Variante A – ohne Eingriff in die Standardsuche:
+Firefox-Suchwidget auf den Homescreen legen (Homescreen lange drücken →
+Widgets → Firefox), antippen und mit dem Kürzel suchen: `ma emperor`.
+
+Variante B – ein Tippen weniger:
+In den Sucheinstellungen `Metal Archives` als **Standardsuchmaschine** setzen.
+Dann geht jede Eingabe im Suchwidget direkt an Metal Archives. Nachteil: Auch
+die normale Websuche in Firefox läuft dann dorthin.
+
 ## Update von einer älteren Version
 Tampermonkey erkennt ein Skript an Name + Namespace. Eine Version mit anderem
 Namen (z. B. das frühere „Metal Explorer") wird als eigenes Skript geführt und
