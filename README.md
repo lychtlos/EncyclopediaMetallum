@@ -1,67 +1,75 @@
-# Metal Explorer
+# Encyclopedia Metallum (Userscript)
 
-Rein statische Web-App (nur HTML/JS) als mobil-optimierter „Skin" für
-[Encyclopaedia Metallum](https://www.metal-archives.com/) mit Streaming-Links.
-**Keine Installation, kein Server, keine Admin-Rechte.**
-
-## Features
-- Suche nach Bandname; Filter: Genre, Land, Gründungsjahr
-- Detailansicht: Logo, Foto, Stammdaten, Lineup, Diskografie mit Review-Scores, ähnliche Bands
-- Buttons je Band: Spotify, YouTube Music, YouTube
-- PWA: „Zum Homescreen hinzufügen" → startet wie eine App
-
-## Wie es funktioniert
-Der Browser darf metal-archives.com wegen CORS nicht direkt abfragen. Die App
-holt die Daten deshalb über einen CORS-Proxy und parst sie im Browser.
-- Standard: mehrere **öffentliche Proxys mit Fallback** (kein Setup nötig).
-- Optional: **eigener Cloudflare-Worker** (unter ⚙ eintragbar) für Zuverlässigkeit.
-
-Metal Archives sitzt hinter Cloudflare. Öffentliche Proxys werden manchmal
-geblockt → dann den eigenen Worker nutzen (Schritt B unten).
-
----
-
-## Schritt A — Auf GitHub Pages stellen (nur Browser)
-
-1. Auf <https://github.com> einloggen → **New repository** → Name z. B.
-   `metal-explorer` → **Public** → **Create**.
-2. Im leeren Repo: **uploading an existing file** anklicken.
-3. Diese Dateien per Drag & Drop hochladen (alle, ohne Ordner):
-   `index.html`, `app.js`, `manifest.webmanifest`,
-   `icon-192.png`, `icon-512.png`, `apple-touch-icon.png`
-   (`README.md`, `worker.js`, `.gitignore` optional) → **Commit changes**.
-4. **Settings → Pages** → unter „Branch" `main` + `/ (root)` wählen → **Save**.
-5. Nach ~1 Min erscheint dort die URL, z. B.
-   `https://DEIN-NAME.github.io/metal-explorer/`. Auf dem Handy öffnen.
-6. **Zum Homescreen:** iPhone (Safari): Teilen-Symbol → „Zum Home-Bildschirm".
-   Android (Chrome): Menü ⋮ → „Zum Startbildschirm hinzufügen".
-
-Suche testen. Klappt sie → fertig. Kommt „kein Proxy erreichbar" → Schritt B.
-
-## Schritt B — Eigener Cloudflare-Worker (nur Browser, zuverlässiger)
-
-1. Kostenloses Konto auf <https://dash.cloudflare.com> (nichts installieren).
-2. Linkes Menü **Workers & Pages → Create → Create Worker** → Namen vergeben →
-   **Deploy**.
-3. **Edit code** öffnen, den kompletten Inhalt von `worker.js` einfügen
-   (vorhandenen Beispielcode ersetzen) → **Deploy**.
-4. Du bekommst eine URL wie `https://metal-xyz.DEIN-SUBDOMAIN.workers.dev`.
-5. In der App oben rechts **⚙** → diese URL eintragen → **Speichern**.
-
-Ab jetzt laufen alle Anfragen über deinen Worker. Der Worker lässt nur
-metal-archives.com-URLs durch.
-
----
+Suche, Filter, Bandansicht und Streaming-Links als Overlay **direkt auf
+metal-archives.com**. Kein Proxy, kein Server, kein API-Key.
 
 ## Dateien
 | Datei | Zweck |
 |---|---|
-| `index.html` | Oberfläche (mobil-optimiert, PWA) |
-| `app.js` | Logik: Proxy-Abruf + Parsing im Browser |
-| `manifest.webmanifest`, `icon-*.png`, `apple-touch-icon.png` | PWA / Homescreen |
-| `worker.js` | optionaler Cloudflare-Worker-Proxy (Schritt B) |
+| `encyclopedia-metallum.user.js` | Das Userscript – das eigentliche Programm |
+| `index.html` | Installationsseite zum Weitergeben an andere |
+| `icon-192.png`, `icon-512.png`, `apple-touch-icon.png` | Symbole für die Seite |
 
-## Hinweise
-- Rein private Nutzung. MA ist werbefrei/spendenfinanziert – bitte nicht spammen.
-- Die AJAX-Endpunkte sind inoffiziell und können sich ändern. Bei kaputtem
-  Parsing die Selektoren in `app.js` (Funktion `parseBand`) anpassen.
+Nicht mehr benötigt (alte Proxy-Variante): `app.js`, `worker.js`,
+`manifest.webmanifest`.
+
+## Was es macht
+- Button **⚡ METALLUM** unten rechts auf jeder MA-Seite
+- Eigene Oberfläche: Suchfeld + Filter (Genre, Land, Jahr)
+- Bandansicht: Logo groß (antippbar), Foto klein (antippbar), Stammdaten,
+  Diskografie mit **▶ YTM**-Button je Release, Lineup, ähnliche Bands
+- Buttons: Spotify, YouTube Music, YouTube
+
+## Weitergeben an andere (empfohlen)
+Mit der Installationsseite werden aus vielen Handgriffen drei Taps.
+
+1. Auf GitHub ein Repository anlegen (öffentlich).
+2. Diese Dateien hochladen: `encyclopedia-metallum.user.js`, `index.html`,
+   `icon-192.png`.
+3. **Settings → Pages** → Branch `main`, Ordner `/ (root)` → Save.
+4. Nach etwa einer Minute erreichbar unter
+   `https://DEIN-NAME.github.io/DEIN-REPO/`
+
+Diesen Link weitergeben. Die Seite erkennt den Browser, blendet nur die
+nötigen Schritte ein und verlinkt das Skript so, dass Tampermonkey es direkt
+zur Installation anbietet – kein Download, keine Dateiauswahl.
+
+Die Seite ermittelt die Skript-Adresse selbst. Es ist nichts anzupassen,
+solange beide Dateien im selben Ordner liegen.
+
+## Selbst installieren (ohne Installationsseite)
+1. Firefox installieren (Chrome unterstützt keine Erweiterungen).
+2. In Firefox: Menü ⋮ → Add-ons → **Tampermonkey** hinzufügen.
+3. Die Datei `encyclopedia-metallum.user.js` öffnen oder in Tampermonkey
+   unter Dashboard → Dienstprogramme auswählen → Installieren.
+4. `https://www.metal-archives.com/#mx` öffnen → Menü ⋮ →
+   **Zum Startbildschirm hinzufügen**.
+
+Die Verknüpfung muss aus Firefox heraus angelegt werden. Sie öffnet dann
+immer Firefox – der Standardbrowser bleibt davon unberührt.
+
+## Update von einer älteren Version
+Tampermonkey erkennt ein Skript an Name + Namespace. Eine Version mit anderem
+Namen (z. B. das frühere „Metal Explorer") wird als eigenes Skript geführt und
+muss im Dashboard gelöscht werden, sonst laufen beide gleichzeitig.
+
+## Wenn kein Button erscheint
+| Prüfung | Wie |
+|---|---|
+| Skript aktiv? | Tampermonkey öffnen – „Encyclopedia Metallum" muss eingeschaltet sein |
+| Läuft es auf der Seite? | Am Rechner: F12 → Konsole → dort steht `[Encyclopedia Metallum] Userscript geladen` |
+| Richtige Adresse? | Nur `https://www.metal-archives.com/...` – mit `www.` |
+| Sicherheitsprüfung sichtbar? | Warten, bis die echte Seite geladen ist |
+| Werbeblocker? | uBlock für die Seite testweise ausschalten |
+| Button außerhalb des Bildschirms? | `#mx` an die Adresse hängen – öffnet sich die Oberfläche, läuft das Skript |
+
+## Hinweis zur Darstellung
+Das Skript setzt auf metal-archives.com ein Mobil-Viewport (die Seite bringt
+keins mit). Dadurch wird die Oberfläche handybreit dargestellt. Nebeneffekt:
+Auch die MA-Seite selbst rendert dann in Handybreite.
+
+## Grenzen
+- Funktioniert nur, solange die MA-Seite im Browser lädt.
+- Die genutzten AJAX-Adressen sind inoffiziell und können sich ändern.
+- Rein private Nutzung. Encyclopaedia Metallum ist werbefrei und
+  spendenfinanziert.
