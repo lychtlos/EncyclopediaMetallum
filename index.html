@@ -36,6 +36,17 @@
   .btn.ghost:hover{filter:brightness(1.3)}
   code{background:var(--panel2);border:1px solid var(--line);border-radius:4px;padding:2px 6px;font-size:13px;word-break:break-all}
   .hide{display:none}
+  .finish{background:var(--panel);border:1px solid var(--acc);border-radius:8px;
+    padding:22px 20px;margin-top:30px;text-align:center;animation:rise .35s ease}
+  .finish h2{font:700 clamp(19px,5vw,24px)/1.2 Oswald,sans-serif;margin:0 0 6px}
+  .finish p{color:var(--mut);font-size:15px;margin:0 0 16px}
+  .finish .btn{font-size:16px;padding:14px 26px}
+  @keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  @media(prefers-reduced-motion:reduce){.finish{animation:none}}
+  .tip{color:var(--mut);font-size:14px;margin:0 0 22px;padding-left:2px}
+  h2{cursor:pointer;user-select:none}
+  h2:hover{color:var(--bone)}
+  li.done h2{color:var(--mut);text-decoration:line-through}
   footer{margin-top:40px;padding-top:18px;border-top:1px solid var(--line);color:var(--mut);font-size:13px}
   a{color:var(--acc2)}
 </style>
@@ -47,6 +58,8 @@
     <h1>ENCYCLOPEDIA METALLUM</h1>
   </header>
   <p class="sub">Metal-Archives mit Suche, Filtern und Streaming-Links – auf dem Handy.</p>
+
+  <p class="hint" style="margin:-14px 0 24px 52px">Jeder Schritt öffnet einen neuen Tab. Diese Anleitung bleibt offen und merkt sich, wie weit du bist.</p>
 
   <!-- Falscher Browser -->
   <div id="wrongBrowser" class="note hide">
@@ -61,32 +74,45 @@
     Homescreen-Verknüpfung am Ende entfällt.
   </div>
 
+  <p class="tip">Alle Knöpfe öffnen einen neuen Tab – diese Anleitung bleibt offen.
+     Tippe auf eine Überschrift, um einen Schritt abzuhaken.</p>
+
   <ol>
     <li id="stepFirefox">
       <h2>Firefox installieren</h2>
       <p class="hint">Chrome kann keine Erweiterungen. Dein Standardbrowser bleibt unverändert.</p>
-      <a class="btn" href="https://play.google.com/store/apps/details?id=org.mozilla.firefox">Firefox laden</a>
+      <a class="btn" data-step="stepFirefox" target="_blank" rel="noopener" href="https://play.google.com/store/apps/details?id=org.mozilla.firefox">Firefox laden</a>
     </li>
 
-    <li>
+    <li id="stepTM">
       <h2>Tampermonkey hinzufügen</h2>
       <p class="hint">In Firefox: Menü ⋮ → Add-ons → Tampermonkey → Hinzufügen.</p>
-      <a class="btn" href="https://addons.mozilla.org/firefox/addon/tampermonkey/">Tampermonkey öffnen</a>
+      <a class="btn" data-step="stepTM" target="_blank" rel="noopener" href="https://addons.mozilla.org/firefox/addon/tampermonkey/">Tampermonkey öffnen</a>
     </li>
 
-    <li>
+    <li id="stepScript">
       <h2>Skript installieren</h2>
       <p class="hint">Tampermonkey zeigt ein Installationsfenster – dort auf „Installieren" tippen.</p>
-      <a class="btn" id="installLink" href="#">Skript installieren</a>
+      <a class="btn" id="installLink" data-step="stepScript" target="_blank" rel="noopener" href="#">Skript installieren</a>
     </li>
 
     <li id="stepHome">
       <h2>Auf den Startbildschirm legen</h2>
       <p class="hint">Öffnet die Oberfläche direkt beim Antippen.</p>
-      <a class="btn ghost" href="https://www.metal-archives.com/#mx">Oberfläche öffnen</a>
+      <a class="btn ghost" data-step="stepHome" target="_blank" rel="noopener" href="https://www.metal-archives.com/#mx">Oberfläche öffnen</a>
       <p class="hint" style="margin-top:10px">Dort dann: Menü ⋮ → Zum Startbildschirm hinzufügen.</p>
     </li>
   </ol>
+
+  <div id="finish" class="finish hide">
+    <h2>Fertig eingerichtet</h2>
+    <p>Suche, Filter und Streaming-Links stehen jetzt bereit.</p>
+    <a class="btn" target="_blank" rel="noopener" href="https://www.metal-archives.com/#mx">Encyclopedia Metallum öffnen</a>
+  </div>
+
+  <p id="resetWrap" class="hide" style="margin-top:18px">
+    <a href="#" id="resetBtn" class="hint">Fortschritt zurücksetzen</a>
+  </p>
 
   <footer>
     Läuft direkt auf metal-archives.com – ohne Server, ohne Konto, ohne Daten an Dritte.
@@ -114,6 +140,67 @@
     // Firefox ist schon da -> Schritt 1 als erledigt markieren
     document.getElementById("stepFirefox").classList.add("done");
   }
+
+  // Fortschritt merken, damit man nach einem Tab-Wechsel weitermachen kann
+  var KEY = "em-setup-done";
+  function loadDone() {
+    try { return JSON.parse(localStorage.getItem(KEY) || "[]"); } catch (e) { return []; }
+  }
+  function markDone(id) {
+    var el = document.getElementById(id);
+    if (el) el.classList.add("done");
+  }
+  function checkFinish() {
+    var steps = Array.prototype.filter.call(
+      document.querySelectorAll("ol li[id]"),
+      function (li) { return !li.classList.contains("hide"); }
+    );
+    var all = steps.length > 0 && steps.every(function (li) {
+      return li.classList.contains("done");
+    });
+    document.getElementById("finish").classList.toggle("hide", !all);
+  }
+
+  var done = loadDone();
+  done.forEach(markDone);
+
+  Array.prototype.forEach.call(document.querySelectorAll("[data-step]"), function (a) {
+    a.addEventListener("click", function () {
+      var id = a.getAttribute("data-step");
+      markDone(id);
+      if (done.indexOf(id) === -1) {
+        done.push(id);
+        try { localStorage.setItem(KEY, JSON.stringify(done)); } catch (e) {}
+      }
+      document.getElementById("resetWrap").classList.remove("hide");
+      checkFinish();
+    });
+  });
+
+  // Schritte lassen sich auch von Hand abhaken – etwa wenn Tampermonkey schon da ist.
+  Array.prototype.forEach.call(document.querySelectorAll("ol li[id] h2"), function (h) {
+    h.style.cursor = "pointer";
+    h.title = "Als erledigt markieren";
+    h.addEventListener("click", function () {
+      var li = h.parentElement;
+      var nowDone = li.classList.toggle("done");
+      var i = done.indexOf(li.id);
+      if (nowDone && i === -1) done.push(li.id);
+      if (!nowDone && i !== -1) done.splice(i, 1);
+      try { localStorage.setItem(KEY, JSON.stringify(done)); } catch (e) {}
+      document.getElementById("resetWrap").classList.toggle("hide", done.length === 0);
+      checkFinish();
+    });
+  });
+
+  if (done.length) document.getElementById("resetWrap").classList.remove("hide");
+  checkFinish();
+
+  document.getElementById("resetBtn").addEventListener("click", function (e) {
+    e.preventDefault();
+    try { localStorage.removeItem(KEY); } catch (err) {}
+    location.reload();
+  });
 
   document.getElementById("copyUrl").addEventListener("click", function () {
     var btn = this;
