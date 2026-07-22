@@ -280,8 +280,6 @@ function init() {
   }
   // Unabhängig vom Button: URL mit #mx öffnet die Oberfläche sofort.
   // Praktisch als Homescreen-Verknüpfung: https://www.metal-archives.com/#mx
-  openFromHash();
-  window.addEventListener("hashchange", openFromHash);
   $("mx-close").addEventListener("click", () => {
     overlay.classList.remove("mx-open");
     document.documentElement.classList.remove("mx-boot");
@@ -349,6 +347,13 @@ function init() {
       $("mx-prev").disabled = state.start === 0;
       $("mx-next").disabled = to >= state.total;
       $("mx-pager").classList.add("mx-show");
+
+      // Genau ein Treffer -> direkt zur Bandseite. Nur bei einer frischen Suche,
+      // nicht beim Blaettern. Die Liste bleibt dahinter stehen, sodass ein
+      // Schliessen der Detailansicht wieder zum Ergebnis fuehrt.
+      if (state.total === 1 && bands.length === 1 && state.start === 0) {
+        openBand(bands[0].id);
+      }
     } catch (err) {
       setStatus("⚠ " + err.message + " – bist du auf metal-archives.com eingeloggt/erreichst die Seite?");
     }
@@ -519,5 +524,10 @@ function init() {
   }
   window.addEventListener("orientationchange", () => setTimeout(fitToScreen, 250));
   window.addEventListener("load", () => setTimeout(fitToScreen, 100));
+
+  // Zum Schluss: Oberflaeche oeffnen bzw. Suche aus der Adresse starten.
+  // Muss hier stehen - runSearch braucht state, das weiter oben noch nicht existiert.
+  openFromHash();
+  window.addEventListener("hashchange", openFromHash);
 }
 })();
